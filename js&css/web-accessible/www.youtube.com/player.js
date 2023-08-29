@@ -67,27 +67,47 @@ FORCED PLAYBACK SPEED
 ImprovedTube.playerPlaybackSpeed = function () {
 	var player = this.elements.player,
 		video = player.querySelector('video'),
-		option = this.storage.player_playback_speed,
-		tries = 0;
-	const intervalMs = 100,
-		maxIntervalMs = 5000;
-
+		option = this.storage.player_playback_speed;
 	if (this.isset(option) === false) {
 		option = 1;
 	}
 
 	if (this.storage.player_forced_playback_speed === true) {
+		if (this.storage.player_force_speed_on_music === true) // dont care if music, just switch it
+					{		player.setPlaybackRate(Number(option));
+					video.playbackRate = Number(option);}  // #1729 question2
+				///////////////////////////////////////			
+		else {	// check if the video is probably not music		
+		let category = document.querySelector('meta[itemprop=genre]')?.content;
+		let titleKeywords = document.getElementsByTagName('meta')?.title?.content + document.getElementsByTagName('meta')?.keywords?.content;
+		let duration = document.querySelector('meta[itemprop=duration]')?.content; // Example:  PT1H20M30S
+			function parseDuration(duration) {
+				const [_, h = 0, m = 0, s = 0] = duration.match(/PT(\d+)?H?(\d+)?M?(\d+)?S?/).map(part => parseInt(part) || 0); 
+					return h * 3600 + m * 60 + s;
+			}
+			function testSongDuration(duration) {
+				const d = parseDuration(duration);
+				if ([105, 420].includes(d)) return 'common';
+				else if ([420, 720].includes(d) || [45, 105].includes(d)) return 'rare';
+				else { if ([120, 410].includes(d / document.querySelector('h3#title div#items').children.length) ) return 'multiple'; }
+			}		
+		tries = 0;
+		const intervalMs = 101; 
+		const maxTries = 8;  // wait for the video descripion up to ~5 seconds... (#1539)
+		if (location.href.indexOf('/watch?') !== -1) maxTries = 1;  // ...except if it is an embedded player
 		var waitForDescInterval = setInterval(() => {
-			if (document.querySelector('div#description') || (++tries * intervalMs >= maxIntervalMs)) {
-				if (player.getVideoData().isLive === false) {
-					let category = document.querySelector('meta[itemprop=genre]')?.content;
-					let titlekeywords = document.getElementsByTagName('meta')?.title?.content + document.getElementsByTagName('meta')?.keywords?.content;
-					if (this.storage.player_force_speed_on_music === true // dont care if music, just switch it
-						|| (this.storage.player_force_speed_on_music === false // check if NOT music first
-							&& document.querySelector('h3#title')?.innerText !== 'Music' // (=buyable/registered music table)
-							&& category !== 'Music'
-							&& !(/official (music )?video|lyrics|cover[\)\]]|[\(\[]cover|cover version|karaok|(sing|play)[- ]?along|卡拉OK|卡拉OK|الكاريوكيкараоке|カラオケ|노래방/i.test(titlekeywords) && !/do[ck]u|interv[iyj]|back[- ]?stage|インタビュー|entrevista|面试|面試|회견|wawancara|مقابلة|интервью|entretien|기록한 것|记录|記錄|ドキュメンタリ|وثائقي|документальный/i.test(titlekeywords)) // says its music in description, but not backstage/interview? ugly hack!
-						// && location.href.indexOf('music') === -1	// (=only running on www.youtube.com anyways)
+			if (document.querySelector('div#description') || (++tries <= maxTries)) {  
+				if (player.getVideoData().isLive === false 
+			//	&& this.storage.player_force_speed_on_music === false  // check if NOT music first  
+  				&& (document.querySelector('h3#title')?.innerText !== 'Music'  // (=buyable/registered music table)
+					|| typeof testSongDuration(duration) !== 'undefined') // resonable duration
+				|| (
+			    (ImprovedTube.elements.category !== 'Music' && !/official (music )?video|lyrics|cover[\)\]]|[\(\[]cover|cover version|karaok|(sing|play)[- ]?along|卡拉OK|卡拉OK|الكاريوكيкараоке|カラオケ|노래방/i.test(titleKeywords)       
+				)    // not category Music (nor title)...
+				|| /do[ck]u|interv[iyj]|back[- ]?stage|インタビュー|entrevista|面试|面試|회견|wawancara|مقابلة|интервью|entretien|기록한 것|记录|記錄|ドキュメンタリ|وثائقي|документальный/i.test(titleKeywords)                 
+					//... - unless it is a documentary, interview or backstage. (Tags/keywords shouldnt lie & very few funny songs titles might have these words)  
+
+//             && location.href.indexOf('music') === -1	// (=currently only running on www.youtube.com anyways)
 						)) {
 							player.setPlaybackRate(Number(option));
 							video.playbackRate = Number(option);
@@ -97,17 +117,16 @@ ImprovedTube.playerPlaybackSpeed = function () {
 					}
 				}
 				clearInterval(waitForDescInterval);
-			}
-		}, intervalMs);
+				intervalMs *= 1.5;
+			}, intervalMs);
+		}		
 	} else {
 		player.setPlaybackRate(1);
 		video.playbackRate = 1;
 	}
 };
+// ImprovedTube.playerForceSpeedOnMusic = function () {  ImprovedTube.playerPlaybackSpeed(); };
 
-ImprovedTube.playerForceSpeedOnMusic = function () {
-	ImprovedTube.playerPlaybackSpeed();
-};
 /*------------------------------------------------------------------------------
 SUBTITLES
 ------------------------------------------------------------------------------*/
